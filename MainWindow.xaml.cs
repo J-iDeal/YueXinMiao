@@ -33,8 +33,10 @@ namespace 月薪喵
 
         private bool isExiting;
         private bool hasCustomImage;
+        private bool isBgmOn;
 
         private System.Windows.Forms.NotifyIcon? trayIcon;
+        private MediaPlayer? bgmPlayer;
 
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -67,6 +69,7 @@ namespace 月薪喵
             this.Top = SystemParameters.PrimaryScreenHeight - this.Height - 60;
 
             LoadGif();
+            SetupBgm();
         }
 
         private void SetupTrayIcon()
@@ -305,6 +308,16 @@ namespace 月薪喵
                 ResetPosition();
                 CloseAllPopups();
             }));
+
+            // --- 声音 ---
+            panel.Children.Add(CreateMenuRow(
+                isBgmOn ? "关闭声音" : "打开声音",
+                null,
+                () =>
+                {
+                    ToggleBgm();
+                    CloseAllPopups();
+                }));
 
             // --- 分隔线 ---
             panel.Children.Add(BuildSeparator());
@@ -655,6 +668,59 @@ namespace 月薪喵
             {
                 currentSubMenuPopup.IsOpen = false;
                 currentSubMenuPopup = null;
+            }
+        }
+
+        private void SetupBgm()
+        {
+            try
+            {
+                var stream = GetEmbeddedStream("月薪喵.mp3");
+                if (stream == null) return;
+
+                var tmpPath = Path.Combine(Path.GetTempPath(), "月薪喵_bgm.mp3");
+                if (!File.Exists(tmpPath))
+                {
+                    using (stream)
+                    using (var fs = new FileStream(tmpPath, FileMode.Create, FileAccess.Write))
+                    {
+                        stream.CopyTo(fs);
+                    }
+                }
+                else
+                {
+                    stream.Dispose();
+                }
+
+                bgmPlayer = new MediaPlayer();
+                bgmPlayer.Open(new Uri(tmpPath));
+                bgmPlayer.MediaEnded += (_, _) =>
+                {
+                    if (isBgmOn && bgmPlayer != null)
+                    {
+                        bgmPlayer.Position = TimeSpan.Zero;
+                        bgmPlayer.Play();
+                    }
+                };
+            }
+            catch
+            {
+                // BGM 加载失败，静默忽略
+            }
+        }
+
+        private void ToggleBgm()
+        {
+            if (bgmPlayer == null) return;
+
+            isBgmOn = !isBgmOn;
+            if (isBgmOn)
+            {
+                bgmPlayer.Play();
+            }
+            else
+            {
+                bgmPlayer.Stop();
             }
         }
 

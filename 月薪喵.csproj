@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="pet.gif" />
+    <EmbeddedResource Include="月薪喵.mp3" />
   </ItemGroup>
 
 </Project>
