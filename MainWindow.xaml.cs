@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -26,6 +28,27 @@ namespace 桌面萌宠
 
         private Popup? currentMenuPopup;
         private Popup? currentSubMenuPopup;
+
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int WS_EX_APPWINDOW = 0x00040000;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+
+            var hwnd = new WindowInteropHelper(this).Handle;
+            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            exStyle |= WS_EX_TOOLWINDOW;   // 不在 Alt+Tab 中显示
+            exStyle &= ~WS_EX_APPWINDOW;    // 移除强制显示标记
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle);
+        }
 
         public MainWindow()
         {
@@ -178,11 +201,11 @@ namespace 桌面萌宠
             var panel = new StackPanel();
 
             // --- 大小切换（带悬停子菜单） ---
-            var sizeItem = CreateMenuRow("大小切换  ▶", null);
+            var sizeItem = CreateMenuRow("🔧  大小切换  ▶", null, null);
             panel.Children.Add(sizeItem);
 
             // --- 重置位置 ---
-            var resetItem = CreateMenuRow("重置位置", () =>
+            var resetItem = CreateMenuRow("📍  重置位置", null, () =>
             {
                 ResetPosition();
                 CloseAllPopups();
@@ -193,12 +216,12 @@ namespace 桌面萌宠
             panel.Children.Add(new Border
             {
                 Height = 1,
-                Background = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
-                Margin = new Thickness(8, 3, 8, 3)
+                Background = new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE)),
+                Margin = new Thickness(12, 3, 12, 3)
             });
 
             // --- 退出 ---
-            var exitItem = CreateMenuRow("退出", () =>
+            var exitItem = CreateMenuRow("❌  退出", null, () =>
             {
                 CloseAllPopups();
                 Application.Current.Shutdown();
@@ -210,13 +233,7 @@ namespace 桌面萌宠
                 AllowsTransparency = true,
                 StaysOpen = false,
                 Placement = PlacementMode.MousePoint,
-                Child = new Border
-                {
-                    Background = Brushes.White,
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-                    BorderThickness = new Thickness(1),
-                    Child = panel
-                }
+                Child = BuildMenuBorder(panel)
             };
 
             popup.Closed += (_, _) => CloseAllPopups();
@@ -230,6 +247,28 @@ namespace 桌面萌宠
             };
 
             return popup;
+        }
+
+        private static Border BuildMenuBorder(UIElement content)
+        {
+            return new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0xFA, 0xFA, 0xFA)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xD0, 0xD0, 0xD0)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(4),
+                Margin = new Thickness(4),
+                Child = content,
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Color.FromArgb(0x40, 0x00, 0x00, 0x00),
+                    BlurRadius = 12,
+                    ShadowDepth = 2,
+                    Direction = 270,
+                    Opacity = 1
+                }
+            };
         }
 
         private Popup BuildSizeSubMenu(FrameworkElement placementTarget)
@@ -247,7 +286,8 @@ namespace 桌面萌宠
             foreach (var (label, scale) in sizes)
             {
                 double captured = scale;
-                var item = CreateMenuRow(label, () =>
+                bool active = Math.Abs(currentScale - captured) < 0.01;
+                var item = CreateMenuRow(label, active ? "●" : "", () =>
                 {
                     SetSize(captured);
                     CloseAllPopups();
@@ -261,32 +301,55 @@ namespace 桌面萌宠
                 StaysOpen = true,
                 PlacementTarget = placementTarget,
                 Placement = PlacementMode.Right,
-                Child = new Border
-                {
-                    Background = Brushes.White,
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-                    BorderThickness = new Thickness(1),
-                    Child = panel
-                }
+                Child = BuildMenuBorder(panel)
             };
         }
 
-        private static Border CreateMenuRow(string text, Action? onClick)
+        private static Border CreateMenuRow(string text, string? indicator, Action? onClick)
         {
             var row = new Border
             {
-                Padding = new Thickness(10, 5, 30, 5),
+                Padding = new Thickness(12, 7, 20, 7),
+                CornerRadius = new CornerRadius(5),
                 Cursor = Cursors.Hand,
                 Background = Brushes.Transparent,
-                Child = new TextBlock
+                Child = new Grid
                 {
-                    Text = text,
-                    FontSize = 13,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x22, 0x22, 0x22))
+                    ColumnDefinitions =
+                    {
+                        new ColumnDefinition { Width = new GridLength(16) },
+                        new ColumnDefinition { Width = GridLength.Auto }
+                    }
                 }
             };
 
-            var highlight = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0));
+            var grid = (Grid)row.Child;
+
+            if (!string.IsNullOrEmpty(indicator))
+            {
+                var dot = new TextBlock
+                {
+                    Text = indicator,
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(dot, 0);
+                grid.Children.Add(dot);
+            }
+
+            var label = new TextBlock
+            {
+                Text = text,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(label, 1);
+            grid.Children.Add(label);
+
+            var highlight = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8));
             row.MouseEnter += (_, _) => row.Background = highlight;
             row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
 
