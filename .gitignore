@@ -1,0 +1,17 @@
+# ===== .NET Build Output =====
+bin/
+obj/
+
+# ===== IDE & Editor =====
+*.user
+*.suo
+*.DotSettings.user
+.vs/
+.idea/
+*.swp
+*~
+
+# ===== OS Generated =====
+Thumbs.db
+Desktop.ini
+.DS_Store
