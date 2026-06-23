@@ -1,6 +1,7 @@
 # ===== .NET Build Output =====
 bin/
 obj/
+publish/
 
 # ===== IDE & Editor =====
 *.user

@@ -1,8 +1,8 @@
 ﻿<Window
-    x:Class="桌面萌宠.MainWindow"
+    x:Class="月薪喵.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="桌面萌宠"
+    Title="月薪喵"
     Width="120"
     Height="120"
     AllowsTransparency="True"

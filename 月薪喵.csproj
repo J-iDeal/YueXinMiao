@@ -6,12 +6,12 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <AssemblyName>月薪喵</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
-    <None Update="pet.gif">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <EmbeddedResource Include="pet.gif" />
   </ItemGroup>
 
 </Project>
