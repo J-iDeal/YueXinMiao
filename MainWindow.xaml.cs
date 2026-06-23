@@ -29,6 +29,10 @@ namespace 桌面萌宠
         private Popup? currentMenuPopup;
         private Popup? currentSubMenuPopup;
 
+        private bool isExiting;
+
+        private System.Windows.Forms.NotifyIcon? trayIcon;
+
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_APPWINDOW = 0x00040000;
@@ -54,10 +58,86 @@ namespace 桌面萌宠
         {
             InitializeComponent();
 
+            SetupTrayIcon();
+
             this.Left = SystemParameters.PrimaryScreenWidth - this.Width;
             this.Top = SystemParameters.PrimaryScreenHeight - this.Height - 60;
 
             LoadGif("pet.gif");
+        }
+
+        private void SetupTrayIcon()
+        {
+            trayIcon = new System.Windows.Forms.NotifyIcon
+            {
+                Text = "月薪喵",
+                Visible = true
+            };
+
+            // 从 GIF 生成托盘图标
+            try
+            {
+                string gifPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pet.gif");
+                if (System.IO.File.Exists(gifPath))
+                {
+                    using var gifImage = System.Drawing.Image.FromFile(gifPath);
+                    var iconBitmap = new System.Drawing.Bitmap(gifImage, new System.Drawing.Size(32, 32));
+                    var iconHandle = iconBitmap.GetHicon();
+                    trayIcon.Icon = System.Drawing.Icon.FromHandle(iconHandle);
+                }
+            }
+            catch
+            {
+                trayIcon.Icon = System.Drawing.SystemIcons.Application;
+            }
+
+            // 托盘右键菜单
+            var trayMenu = new System.Windows.Forms.ContextMenuStrip();
+
+            var showItem = trayMenu.Items.Add("显示/隐藏");
+            showItem.Click += (_, _) => ToggleVisibility();
+
+            trayMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+
+            var exitItem = trayMenu.Items.Add("退出");
+            exitItem.Click += (_, _) =>
+            {
+                isExiting = true;
+                trayIcon.Visible = false;
+                trayIcon.Dispose();
+                Application.Current.Shutdown();
+            };
+
+            trayIcon.ContextMenuStrip = trayMenu;
+
+            // 左键单击 = 显示/隐藏
+            trayIcon.MouseClick += (_, e) =>
+            {
+                if (e.Button == System.Windows.Forms.MouseButtons.Left)
+                    ToggleVisibility();
+            };
+        }
+
+        private void ToggleVisibility()
+        {
+            if (this.Visibility == Visibility.Visible)
+                this.Hide();
+            else
+                this.Show();
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (!isExiting)
+            {
+                e.Cancel = true;
+                this.Hide();
+            }
+            else
+            {
+                trayIcon?.Dispose();
+            }
+            base.OnClosing(e);
         }
 
         private void LoadGif(string filePath)
