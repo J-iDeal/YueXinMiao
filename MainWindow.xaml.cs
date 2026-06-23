@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,6 +10,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Win32;
 
 namespace 月薪喵
 {
@@ -30,6 +32,7 @@ namespace 月薪喵
         private Popup? currentSubMenuPopup;
 
         private bool isExiting;
+        private bool hasCustomImage;
 
         private System.Windows.Forms.NotifyIcon? trayIcon;
 
@@ -292,6 +295,10 @@ namespace 月薪喵
             var sizeItem = BuildSubMenuItem("大小切换");
             panel.Children.Add(sizeItem);
 
+            // --- 图片管理 ---
+            var imageItem = BuildSubMenuItem("图片管理");
+            panel.Children.Add(imageItem);
+
             // --- 重置位置 ---
             panel.Children.Add(CreateMenuRow("重置位置", null, () =>
             {
@@ -325,6 +332,13 @@ namespace 月薪喵
             {
                 CloseSubPopup();
                 currentSubMenuPopup = BuildSizeSubMenu(sizeItem);
+                currentSubMenuPopup.IsOpen = true;
+            };
+
+            imageItem.MouseEnter += (_, _) =>
+            {
+                CloseSubPopup();
+                currentSubMenuPopup = BuildImageSubMenu(imageItem);
                 currentSubMenuPopup.IsOpen = true;
             };
 
@@ -461,6 +475,108 @@ namespace 月薪喵
                 Placement = PlacementMode.Right,
                 Child = BuildMenuBorder(panel)
             };
+        }
+
+        private Popup BuildImageSubMenu(FrameworkElement placementTarget)
+        {
+            var panel = new StackPanel();
+            panel.Children.Add(BuildMenuPadding(6));
+
+            panel.Children.Add(CreateMenuRow("更换图片", null, () =>
+            {
+                ChangeImage();
+                CloseAllPopups();
+            }));
+
+            if (hasCustomImage)
+            {
+                panel.Children.Add(CreateMenuRow("恢复默认", null, () =>
+                {
+                    RestoreDefaultImage();
+                    CloseAllPopups();
+                }));
+            }
+
+            panel.Children.Add(BuildMenuPadding(6));
+
+            return new Popup
+            {
+                AllowsTransparency = true,
+                StaysOpen = true,
+                PlacementTarget = placementTarget,
+                Placement = PlacementMode.Right,
+                Child = BuildMenuBorder(panel)
+            };
+        }
+
+        private void ChangeImage()
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "选择宠物的GIF图片",
+                Filter = "GIF图片|*.gif|PNG图片|*.png|JPG图片|*.jpg;*.jpeg|所有图片|*.gif;*.png;*.jpg;*.jpeg",
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)
+            };
+
+            if (dlg.ShowDialog() == true)
+            {
+                try
+                {
+                    LoadGifFromFile(dlg.FileName);
+                    hasCustomImage = true;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"图片加载失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void RestoreDefaultImage()
+        {
+            try
+            {
+                LoadGif();
+                hasCustomImage = false;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"恢复默认图片失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void LoadGifFromFile(string filePath)
+        {
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var decoder = new GifBitmapDecoder(
+                stream,
+                BitmapCreateOptions.PreservePixelFormat,
+                BitmapCacheOption.OnLoad);
+
+            gifFrames.Clear();
+            frameDelays.Clear();
+
+            foreach (var frame in decoder.Frames)
+            {
+                var frozen = BitmapFrame.Create(frame);
+                frozen.Freeze();
+                gifFrames.Add(frozen);
+
+                frameDelays.Add(ExtractFrameDelay(frame));
+            }
+
+            if (gifFrames.Count > 0)
+            {
+                PetImage.Source = gifFrames[0];
+                currentFrame = 0;
+
+                originalGifWidth = gifFrames[0].PixelWidth;
+                originalGifHeight = gifFrames[0].PixelHeight;
+
+                ApplyScale(currentScale);
+
+                StartAnimation();
+            }
         }
 
         private static Border CreateMenuRow(string text, string? indicator, Action? onClick)
