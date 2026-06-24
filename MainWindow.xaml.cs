@@ -32,8 +32,10 @@ namespace 月薪喵
         private Popup? currentSubMenuPopup;
 
         private bool isExiting;
-        private bool hasCustomImage;
         private bool isBgmOn;
+
+        private string? currentImageResource = "pet.gif";
+        private readonly List<string> builtInImages = new();
 
         private System.Windows.Forms.NotifyIcon? trayIcon;
         private MediaPlayer? bgmPlayer;
@@ -69,6 +71,7 @@ namespace 月薪喵
             this.Top = SystemParameters.PrimaryScreenHeight - this.Height - 60;
 
             LoadGif();
+            ScanBuiltInImages();
             SetupBgm();
         }
 
@@ -495,13 +498,40 @@ namespace 月薪喵
             var panel = new StackPanel();
             panel.Children.Add(BuildMenuPadding(6));
 
-            panel.Children.Add(CreateMenuRow("更换图片", null, () =>
+            // --- 浏览选择（预览弹窗） ---
+            panel.Children.Add(CreateMenuRow("浏览选择…", null, () =>
+            {
+                CloseAllPopups();
+                OpenImagePicker();
+            }));
+
+            panel.Children.Add(BuildSeparator());
+
+            // 列出所有内置图片
+            foreach (var resName in builtInImages)
+            {
+                string displayName = GetDisplayName(resName);
+                bool active = currentImageResource == resName && currentImageResource != null;
+                string captured = resName;
+                panel.Children.Add(CreateMenuRow(displayName, active ? "checked" : null, () =>
+                {
+                    LoadBuiltInGif(captured);
+                    currentImageResource = captured;
+                    CloseAllPopups();
+                }));
+            }
+
+            panel.Children.Add(BuildSeparator());
+
+            // 更换图片（从本地文件）
+            panel.Children.Add(CreateMenuRow("更换本地图片", null, () =>
             {
                 ChangeImage();
                 CloseAllPopups();
             }));
 
-            if (hasCustomImage)
+            // 恢复默认 (currentImageResource != "pet.gif" 时显示)
+            if (currentImageResource != "pet.gif")
             {
                 panel.Children.Add(CreateMenuRow("恢复默认", null, () =>
                 {
@@ -522,6 +552,109 @@ namespace 月薪喵
             };
         }
 
+        private static string GetDisplayName(string resName)
+        {
+            if (resName == "pet.gif") return "默认 (月薪喵)";
+
+            // resName 格式: "月薪喵.images.xxx.gif"
+            var fileName = resName;
+            if (fileName.StartsWith("月薪喵.images.", StringComparison.OrdinalIgnoreCase))
+                fileName = fileName["月薪喵.images.".Length..];
+            else if (fileName.StartsWith("月薪喵.", StringComparison.OrdinalIgnoreCase))
+                fileName = fileName["月薪喵.".Length..];
+
+            // 去掉 .gif 后缀
+            if (fileName.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+                fileName = fileName[..^4];
+
+            // 截断过长的 hash 名
+            if (fileName.Length > 16)
+                fileName = fileName[..16] + "…";
+
+            return fileName;
+        }
+
+        private void ScanBuiltInImages()
+        {
+            builtInImages.Clear();
+            var asm = typeof(MainWindow).Assembly;
+            foreach (var name in asm.GetManifestResourceNames())
+            {
+                if (name.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+                    builtInImages.Add(name);
+            }
+        }
+
+        private void OpenImagePicker()
+        {
+            var picker = new ImagePickerWindow(
+                builtInImages,
+                currentImageResource,
+                resName =>
+                {
+                    LoadBuiltInGif(resName);
+                    currentImageResource = resName;
+                },
+                () =>
+                {
+                    CloseAllPopups();
+                    ChangeImage();
+                },
+                currentImageResource != "pet.gif"
+                    ? () =>
+                    {
+                        RestoreDefaultImage();
+                    }
+                    : null
+            );
+
+            picker.ShowDialog();
+        }
+
+        private void LoadBuiltInGif(string resourceName)
+        {
+            try
+            {
+                var stream = typeof(MainWindow).Assembly.GetManifestResourceStream(resourceName);
+                if (stream == null) return;
+
+                using (stream)
+                {
+                    var decoder = new GifBitmapDecoder(
+                        stream,
+                        BitmapCreateOptions.PreservePixelFormat,
+                        BitmapCacheOption.OnLoad);
+
+                    gifFrames.Clear();
+                    frameDelays.Clear();
+
+                    foreach (var frame in decoder.Frames)
+                    {
+                        var frozen = BitmapFrame.Create(frame);
+                        frozen.Freeze();
+                        gifFrames.Add(frozen);
+                        frameDelays.Add(ExtractFrameDelay(frame));
+                    }
+                }
+
+                if (gifFrames.Count > 0)
+                {
+                    PetImage.Source = gifFrames[0];
+                    currentFrame = 0;
+
+                    originalGifWidth = gifFrames[0].PixelWidth;
+                    originalGifHeight = gifFrames[0].PixelHeight;
+
+                    ApplyScale(currentScale);
+                    StartAnimation();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"内置图片加载失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void ChangeImage()
         {
             var dlg = new OpenFileDialog
@@ -536,7 +669,7 @@ namespace 月薪喵
                 try
                 {
                     LoadGifFromFile(dlg.FileName);
-                    hasCustomImage = true;
+                    currentImageResource = null; // 标记为外部图片
                 }
                 catch (Exception ex)
                 {
@@ -549,13 +682,13 @@ namespace 月薪喵
         {
             try
             {
-                LoadGif();
-                hasCustomImage = false;
+                LoadBuiltInGif("pet.gif");
             }
-            catch (Exception ex)
+            catch
             {
-                MessageBox.Show($"恢复默认图片失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                LoadGif();
             }
+            currentImageResource = "pet.gif";
         }
 
         private void LoadGifFromFile(string filePath)
